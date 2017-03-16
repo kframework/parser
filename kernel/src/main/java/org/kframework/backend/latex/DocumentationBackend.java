@@ -1,0 +1,14 @@
+// Copyright (c) 2014-2016 K Team. All Rights Reserved.
+package org.kframework.backend.latex;
+
+import org.kframework.kil.loader.Context;
+import org.kframework.kompile.KompileOptions;
+import org.kframework.utils.Stopwatch;
+import org.kframework.utils.file.FileUtil;
+
+public class DocumentationBackend extends LatexBackend {
+
+    public DocumentationBackend(Stopwatch sw, Context context, KompileOptions options, FileUtil files) {
+        super(sw, context, options, true, files);
+    }
+}
