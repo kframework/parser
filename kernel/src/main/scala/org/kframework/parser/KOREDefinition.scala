@@ -3,13 +3,14 @@ package org.kframework.parser
 import org.kframework.minikore.interfaces.pattern._
 import org.kframework.minikore.interfaces.build.Builders
 
-case class KDefinitionDSL(b: Builders) {
+case class KarserDSL(b: Builders) {
 
   val outerUtils = org.kframework.minikore.MiniKoreOuterUtils(b)
   val meta = org.kframework.minikore.MiniKoreMeta(b)
 
-  import b._
   import org.kframework.minikore.implementation.MiniKore.{Definition, Module, Sentence, Import, SymbolDeclaration, Attributes, Rule}
+  import org.kframework.minikore.implementation.MiniKoreDSL._
+  import b._
   import outerUtils._
   import meta._
 
@@ -17,49 +18,52 @@ case class KDefinitionDSL(b: Builders) {
   // ===========
 
   trait ProductionItem
+  case class Regex(regex: String)      extends ProductionItem
+  case class Terminal(name: String)    extends ProductionItem
+  case class NonTerminal(sort: String) extends ProductionItem
 
-  case class NonTerminal(name: String) extends ProductionItem
-
-  case class Regex(regex: String) extends ProductionItem
-
-  case class Terminal(name: String) extends ProductionItem
-
-  implicit def asTerminal(name: String): Terminal = Terminal(name)
+  implicit def asTerminal(name: String): Terminal     = Terminal(name)
   implicit def asNonTerminal(sort: Sort): NonTerminal = NonTerminal(sort.str)
 
-  val KTerminal      = Symbol("KTerminal@K-PRETTY-PRODUCTION")
-  val KRegexTerminal = Symbol("KRegexTerminal@K-PRETTY-PRODUCTION")
-  val KNonTerminal   = Symbol("KNonTerminal@K-PRETTY-PRODUCTION")
-
-  val KLabel = Symbol("klabel")
-
-  val KProduction     = Symbol("KProduction")
-  val KSyntaxPriority = Symbol("KSyntaxPriority")
-  val KPriorityItems  = Symbol("KPriorityItems")
+  val KTerminal      = Symbol("#Terminal")
+  val KRegexTerminal = Symbol("#RegexTerminal")
+  val KNonTerminal   = Symbol("#NonTerminal")
+  val KProduction    = Symbol("#Production")
 
   // TODO: We need to handle regexes better (precede/follow)
-  def productionAsPattern: ProductionItem => DomainValue = {
-    case Terminal(str)  => DomainValue(KTerminal, str)
-    case Regex(str)     => DomainValue(KRegexTerminal, "#" + str + "#")
-    case Sort(sortName) => DomainValue(KNonTerminal, sortName)
+  val upProductionItem: ProductionItem => Application = {
+    case Terminal(term)    => Application(KTerminal, Seq(DomainValue(KValue, term)))
+    case Regex(str)        => Application(KRegexTerminal, Seq(DomainValue(KValue, "#"), DomainValue(KValue, str), DomainValue(KValue, "#")))
+    case NonTerminal(sort) => Application(KNonTerminal, Seq(DomainValue(KValue, sort)))
+  }
+
+  val downProductionItem: Pattern => ProductionItem = {
+    case Application(`KTerminal`, DomainValue(`KValue`, term) :: Nil)                                                                          => Terminal(term)
+    case Application(`KRegexTerminal`, DomainValue(`KValue`, precede) :: DomainValue(`KValue`, regex) :: DomainValue(`KValue`, follow) :: Nil) => Regex(precede + regex + follow)
+    case Application(`KNonTerminal`, DomainValue(`KValue`, sort) :: Nil)                                                                       => NonTerminal(sort)
   }
 
   // TODO: This should be more careful with KTerminal and KRegexTermial to take into account precede and follow clauses
-  val makeCtorString: DomainValue => String = {
-    case DomainValue(`KTerminal`, str)        => str
-    case DomainValue(`KRegexTerminal`, regex) => "r\"" + regex + "\""
-    case DomainValue(`KNonTerminal`, _)       => "_"
+  val productionAsSymbol: ProductionItem => String = {
+    case Terminal(term)    => term
+    case Regex(regex)      => "r\"" + regex + "\""
+    case NonTerminal(sort) => "_"
   }
+
+  def mkString(pis: Seq[ProductionItem]): String  = (pis map productionAsSymbol).mkString
+  def mkArgs(pis: Seq[ProductionItem]): Seq[Sort] = pis collect { case NonTerminal(sort) => Sort(sort) }
 
   // Attributes
   // ==========
 
-  implicit def asPatternSymbol(name: String): Application = Application(Symbol(name), Seq.empty)
+  val KLabel = Symbol("#Label")
 
-  def klabel(value: String): Application              = Application(KLabel, Seq(DomainValue(KValue, value)))
-  def prod(production: Seq[Pattern]): Application     = Application(KProduction, production) // TODO: talk to Daejun about disagreements in encoding
-  def kprod(production: ProductionItem*): Application = prod(production map productionAsPattern)
-  def priority(priorities: Seq[Pattern]): Application = Application(KSyntaxPriority, priorities)
+  implicit def asAttribute(name: String): Application = Application(Symbol(name), Seq.empty)
+
+  def kLabel(symbol: Symbol): Application                = Application(KLabel, Seq(DomainValue(KValue, symbol.str)))
+  def kProduction(pis: Seq[ProductionItem]): Application = Application(KProduction, pis map upProductionItem)
+  def kProduction(pis: ProductionItem*): Application     = kProduction(pis)
+  //def priority(priorities: Seq[Pattern]): Application = Application(KSyntaxPriority, priorities)
   //def kpriority(priorities: Seq[String]*): Application       = priority(Seq(Application(KPriorityItems, priorities map upSymbolList)))
 
   def getKLabel(atts: Attributes): Option[String] = getAttributeKey(KLabel, atts) match {
@@ -67,57 +71,29 @@ case class KDefinitionDSL(b: Builders) {
     case _                                      => None
   }
 
-  // MINIKORE DSL
-  // ============
-
-  case class definition(modules: Module*) {
-    def att(atts: Pattern*): Definition = Definition(modules, atts)
-  }
-
-  case class module(name: String, sentences: Sentence*) {
-    def att(atts: Pattern*): Module = Module(name, sentences, atts)
-  }
-
-  def imports(name: String) = Import(name, Seq.empty)
-
-  case class symbol(sort: NonTerminal, klabel: String, args: NonTerminal*) {
-    def att(atts: Pattern*): SymbolDeclaration = SymbolDeclaration(Sort(sort.name), Symbol(klabel), args map {s => Sort(s.name)}, atts)
-  }
+  // Syntax Declaration
+  // ==================
 
   case class syntax(sort: Sort, pis: Seq[ProductionItem] = Seq.empty) {
     def is(pis: ProductionItem*): syntax = syntax(sort, pis)
-    def att(atts: Pattern*): SymbolDeclaration = {
-      val prodPatterns = pis map productionAsPattern
-      SymbolDeclaration(sort, Symbol(getKLabel(atts) getOrElse(prodPatterns map makeCtorString mkString)), pis.collect { case NonTerminal(name) => Sort(name) }, atts :+ prod(prodPatterns))
-    }
+    def att(atts: Pattern*): SymbolDeclaration = SymbolDeclaration(sort, Symbol(getKLabel(atts).getOrElse(mkString(pis))), mkArgs(pis), atts :+ kProduction(pis))
   }
-
-  case class rule(l: Pattern, r: Pattern) {
-    def att(atts: Pattern*): Rule = Rule(Rewrite(l, r), atts)
-  }
-
-  def term(label: String, args: Pattern*): Application = Application(Symbol(label), args)
-
-  implicit def asDefinition(d: definition): Definition = d.att()
-  implicit def asModule(m: module): Module = m.att()
-  implicit def asSentence(s: symbol): SymbolDeclaration = s.att()
-  implicit def asSentence(s: syntax): SymbolDeclaration = s.att()
-  implicit def asSentence(r: rule): Rule = r.att()
-
-  def mkDefaultPriorities(m: Module): Module = ???
+  // TODO: For some reason this implicit conversion isn't working
+  implicit def asSymbolDeclaration(s: syntax): SymbolDeclaration = s.att()
 }
 
 
 case class KOREDefinition(b: Builders) {
 
   val meta = org.kframework.minikore.MiniKoreMeta(b)
-  val dsl = KDefinitionDSL(b)
+  val karserDsl = KarserDSL(b)
 
   import org.kframework.minikore.converters.KoreToMini.{iMainModule, iEntryModules}
   import org.kframework.minikore.implementation.MiniKore.Module
+  import org.kframework.minikore.implementation.MiniKoreDSL._
   import b._
   import meta._
-  import dsl._
+  import karserDsl._
 
   // KTOKENS
   // =======
@@ -126,114 +102,105 @@ case class KOREDefinition(b: Builders) {
   val KRegexSymbolEscaped = "`[^\n\r\t\f]+`"
   val KRegexString        = "[\"](([^\n\r\t\f\"\\\\])|([\\\\][nrtf\"\\\\])|([\\\\][x][0-9a-fA-F]{2})|([\\\\][u][0-9a-fA-F]{4})|([\\\\][U][0-9a-fA-F]{8}))*[\"]"
 
-  //val KRegexSort = "[A-Z][A-Za-z0-9]*"
-  //val KRegexSymbol3 = "(?<![a-zA-Z0-9])[#a-z][a-zA-Z0-9@\\-]*"
-  // TODO: the (?<! is a signal to the parser that it should be used as a "precedes" clause, do we need it?
-  // val KRegexAttributeKey3 = """(?<![a-zA-Z0-9])[#a-z][a-zA-Z0-9@\\-]*"""
-
-  val KSymbol     = Sort("KSymbol")
-  val KSymbolList = Sort("KSymbolList")
-  val KString     = Sort("KString")
+  val SSymbol     = Sort("Symbol")
+  val SSymbolList = Sort("SymbolList")
+  val SString     = Sort("String")
 
   val KTOKENS: Module = module("KTOKENS",
-    syntax(KSymbol) is Regex(KRegexSymbol) att "token",
-    syntax(KSymbol) is Regex(KRegexSymbolEscaped) att "token",
-    syntax(KSymbolList) is "" att klabel(".KSymbolList"),
-    syntax(KSymbolList) is KSymbol,
-    syntax(KSymbolList) is (KSymbol, ",", KSymbolList) att klabel("KSymbolList"),
+    syntax(SSymbol) is Regex(KRegexSymbol)        att("token"),
+    syntax(SSymbol) is Regex(KRegexSymbolEscaped) att("token"),
 
-    syntax(KString) is Regex(KRegexString) att "token"
-  ) //att kpriority()
+    syntax(SSymbolList) is ""                          att(kLabel(KSymbolListMt)),
+    syntax(SSymbolList) is SSymbol                     att(),
+    syntax(SSymbolList) is (SSymbol, ",", SSymbolList) att(kLabel(KSymbolList)),
 
-  val KTOKENS_LABELS = Seq(".KSymbolList", "KSymbolList", "KSymbol@KTOKENS")
+    syntax(SString) is Regex(KRegexString) att("token")
+  )
 
-  // KML
-  // ===
+  val KTOKENS_LABELS = Seq(KSymbol, KSymbolList, KSymbolListMt)
 
-  val KMLVariable    = Sort("KMLVariable")
-  val KMLPattern     = Sort("KMLPattern")
-  val KMLPatternList = Sort("KMLPatternList")
+  // KPATTERN
+  // ========
 
-  val KML: Module = module("KML",
+  val SVariable    = Sort("Variable")
+  val SPattern     = Sort("Pattern")
+  val SPatternList = Sort("PatternList")
+
+  val KPATTERN: Module = module("KPATTERN",
     imports("KTOKENS"),
 
-    syntax(KMLVariable) is (KSymbol, ":", KSymbol) att klabel("KMLVariable"),
+    syntax(SVariable) is (SSymbol, ":", SSymbol) att kLabel(KVariable),
 
-    syntax(KMLPattern) is KMLVariable,
-    syntax(KMLPattern) is Regex(KRegexSymbol) att "token",
+    syntax(SPattern) is SVariable           att(),
+    syntax(SPattern) is Regex(KRegexSymbol) att("token"),
 
-    syntax(KMLPattern) is "tt" att klabel("KMLTrue"),
-    syntax(KMLPattern) is "ff" att klabel("KMLFalse"),
+    syntax(SPattern) is "top" att(kLabel(KTop)),
+    syntax(SPattern) is "bot" att(kLabel(KBottom)),
 
-    syntax(KMLPattern) is (KMLPattern, "/\\", KMLPattern) att klabel("KMLAnd"),
-    syntax(KMLPattern) is (KMLPattern, "\\/", KMLPattern) att klabel("KMLOr"),
-    syntax(KMLPattern) is ("~", KMLPattern) att klabel("KMLNot"),
+    syntax(SPattern) is (SPattern, "/\\", SPattern) att(kLabel(KAnd)),
+    syntax(SPattern) is (SPattern, "\\/", SPattern) att(kLabel(KOr)),
+    syntax(SPattern) is ("~", SPattern)             att(kLabel(KNot)),
 
-    syntax(KMLPattern) is (KMLPattern, "->", KMLPattern) att klabel("KMLImplies"),
-    syntax(KMLPattern) is ("E", KMLVariable, ".", KMLPattern) att klabel("KMLExists"),
-    syntax(KMLPattern) is ("A", KMLVariable, ".", KMLPattern) att klabel("KMLForAll"),
+    syntax(SPattern) is (SPattern, "->", SPattern)      att(kLabel(KImplies)),
+    syntax(SPattern) is ("E", SVariable, ".", SPattern) att(kLabel(KExists)),
+    syntax(SPattern) is ("A", SVariable, ".", SPattern) att(kLabel(KForAll)),
 
-    syntax(KMLPattern) is ("next", KMLPattern) att klabel("KMLNext"),
-    syntax(KMLPattern) is (KMLPattern, "=>", KMLPattern) att klabel("KMLRewrite"),
-    syntax(KMLPattern) is (KMLPattern, "==", KMLPattern) att klabel("KMLEquals"),
+    syntax(SPattern) is ("next", SPattern)         att(kLabel(KNext)),
+    syntax(SPattern) is (SPattern, "=>", SPattern) att(kLabel(KRewrite)),
+    syntax(SPattern) is (SPattern, "==", SPattern) att(kLabel(KEquals)),
 
-    syntax(KMLPattern) is (KSymbol, "(", KMLPatternList, ")") att klabel("KMLApplication"),
+    syntax(SPattern) is (SSymbol, "(", SPatternList, ")") att(kLabel(KApplication)),
 
-    syntax(KMLPatternList) is "" att klabel(".KMLPatternList"),
-    syntax(KMLPatternList) is KMLPattern,
-    syntax(KMLPatternList) is (KMLPattern, ",", KMLPatternList) att klabel("KMLPatternList")
+    syntax(SPatternList) is ""                            att(kLabel(KPatternListMt)),
+    syntax(SPatternList) is SPattern                      att(),
+    syntax(SPatternList) is (SPattern, ",", SPatternList) att(kLabel(KPatternList))
   )
 
   // TODO: Define this programatically (so that if the module changes so does it)
-  def KML_LABELS = Seq( "KMLVariable", "KMLDomainValue", "KMLTrue", "KMLFalse", "KMLAnd", "KMLOr", "KMLNot", "KMLImplies"
-                      , "KMLExists", "KMLForAll", "KMLNext", "KMLRewrite", "KMLEquals", "KMLApplication", "KMLPatternList", ".KMLPatternList"
-                      )
+  def KPATTERN_LABELS = Seq(KVariable, KDomainValue, KTop, KBottom, KAnd, KOr, KNot, KImplies, KExists, KForAll, KNext, KRewrite, KEquals, KApplication, KPatternList, KPatternListMt)
 
   // KSENTENCE
   // =========
 
-  val KAttributes   = Sort("KAttributes")
-  val KSentence     = Sort("KSentence")
-  val KSentenceList = Sort("KSentenceList")
+  val SAttributes   = Sort("Attributes")
+  val SSentence     = Sort("Sentence")
+  val SSentenceList = Sort("SentenceList")
 
   val KSENTENCE: Module = module("KSENTENCE",
-    imports("KML"),
+    imports("KPATTERN"),
 
-    syntax(KAttributes) is "" att klabel(".KAttributes"),
-    syntax(KAttributes) is ("[", KMLPatternList, "]") att klabel("KAttributes"),
+    syntax(SAttributes) is ""                       att(kLabel(KAttributesMt)),
+    syntax(SAttributes) is ("[", SPatternList, "]") att(kLabel(KAttributes)),
 
-    syntax(KSentence) is ("imports", KSymbol, KAttributes) att klabel("KImport"),
-    syntax(KSentence) is ("syntax", KSymbol, ":=", KSymbol, "(", KSymbolList, ")", KAttributes) att klabel("KSymbolDeclaration"),
-    syntax(KSentence) is ("rule", KMLPattern, KAttributes) att klabel("KRule"),
+    syntax(SSentence) is ("imports", SSymbol, SAttributes)                                      att(kLabel(KImport)),
+    syntax(SSentence) is ("syntax", SSymbol, ":=", SSymbol, "(", SSymbolList, ")", SAttributes) att(kLabel(KSymbolDeclaration)),
+    syntax(SSentence) is ("rule", SPattern, SAttributes)                                        att(kLabel(KRule)),
 
-    syntax(KSentenceList) is KSentence,
-    syntax(KSentenceList) is "" att klabel(".KSentenceList"),
-    syntax(KSentenceList) is (KSentence, KSentenceList) att klabel("KSentenceList")
+    syntax(SSentenceList) is SSentence                  att(),
+    syntax(SSentenceList) is ""                         att(kLabel(KSentenceListMt)),
+    syntax(SSentenceList) is (SSentence, SSentenceList) att(kLabel(KSentenceList))
   )
 
   // KDEFINITION
   // ===========
 
-  // val KRegexModuleName = "[A-Z][A-Z\\-]*"
-  // val KRequire = Sort("KRequire")
-  // val KRequireList = Sort("KRequireList")
-
-  val KModule     = Sort("KModule")
-  val KModuleList = Sort("KModuleList")
-  val KDefinition = Sort("KDefinition")
+  val SModule     = Sort("Module")
+  val SModuleList = Sort("ModuleList")
+  val SDefinition = Sort("Definition")
 
   val KDEFINITION: Module = module("KDEFINITION",
     imports("KSENTENCE"),
 
-    syntax(KModule) is ("module", KSymbol, KSentenceList, "endmodule", KAttributes) att klabel("KModule"),
-    syntax(KModuleList) is "" att klabel(".KModuleList"),
-    syntax(KModuleList) is (KModule, KModuleList) att klabel("KModuleList"),
+    syntax(SModule) is ("module", SSymbol, SSentenceList, "endmodule", SAttributes) att(kLabel(KModule)),
 
-    syntax(KDefinition) is (KAttributes, KModuleList) att klabel("KDefinition")
+    syntax(SModuleList) is ""                     att(kLabel(KModuleListMt)),
+    syntax(SModuleList) is (SModule, SModuleList) att(kLabel(KModuleList)),
+
+    syntax(SDefinition) is (SAttributes, SModuleList) att(kLabel(KDefinition))
   )
 
   // KORE
   // ====
 
-  val KORE = definition(KTOKENS, KML, KSENTENCE, KDEFINITION) att (Application(iMainModule, Seq(DomainValue(KValue, "KDEFINITION"))), Application(iEntryModules, Seq(DomainValue(KValue, "KDEFINITION"))))
+  val KORE = definition(KTOKENS, KPATTERN, KSENTENCE, KDEFINITION) att (Application(iMainModule, Seq(DomainValue(KValue, "KDEFINITION"))), Application(iEntryModules, Seq(DomainValue(KValue, "KDEFINITION"))))
 }
