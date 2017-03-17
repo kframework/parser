@@ -1,15 +1,26 @@
 package org.kframework.parser
 
 import org.apache.commons.lang3.StringEscapeUtils
-import org.kframework.minikore.MiniKore._
-import org.kframework.minikore.KoreToMini._
-import org.kframework.minikore.MiniKoreOuterUtils._
-import org.kframework.minikore.MiniKorePatternUtils._
-import org.kframework.minikore.MiniKoreMeta._
-import org.kframework.parser.KDefinitionDSL._
+
+import org.kframework.minikore.interfaces.pattern._
+import org.kframework.minikore.interfaces.build.Builders
+
+import org.kframework.minikore.converters.KoreToMini._
+import org.kframework.minikore.implementation.MiniKore.{Definition, Module, Sentence, Import, SortDeclaration, SymbolDeclaration, Attributes, Rule, Axiom}
 
 
-object ParserNormalization {
+case class ParserNormalization(b: Builders) {
+
+  val meta = org.kframework.minikore.MiniKoreMeta(b)
+  val patternUtils = org.kframework.minikore.MiniKorePatternUtils(b)
+  val outerUtils = org.kframework.minikore.MiniKoreOuterUtils(b)
+  val dsl = KDefinitionDSL(b)
+
+  import b._
+  import meta._
+  import patternUtils._
+  import outerUtils._
+  import dsl._
 
   // Utilities
   // =========
@@ -17,7 +28,7 @@ object ParserNormalization {
   def stripString(front: Int, back: Int): String => String = (str: String) => StringEscapeUtils.unescapeJava(str drop front dropRight back)
 
   def removeSubNodes(label: String): Pattern => Pattern = {
-    case Application(name, args) => Application(name, args filterNot { case Application(`label`, _) => true case _ => false })
+    case Application(name, args) => Application(name, args filterNot { case Application(Symbol(`label`), _) => true case _ => false })
     case pattern                 => pattern
   }
 
@@ -25,14 +36,14 @@ object ParserNormalization {
   // ====================
 
   val removeParseInfo: Pattern => Pattern = {
-    case Application("#", Application("#", actual :: _) :: _) => actual
+    case Application(Symbol("#"), Application(Symbol("#"), actual :: _) :: _) => actual
     case pattern                                              => pattern
   }
 
   val normalizeTokens: Pattern => Pattern = {
-    case dv@DomainValue("KSymbol@KTOKENS", _)     => upDomainValue(dv)
-    case DomainValue(name@"KString@KTOKENS", str) => upDomainValue(DomainValue(name, stripString(1, 1)(str)))
-    case DomainValue("KMLPattern@KML", name)      => Application("KMLApplication", Seq(upSymbol(name)))
+    //case dv@DomainValue("KSymbol@KTOKENS", _)     => upDomainValue(dv)
+    //case DomainValue(name@"KString@KTOKENS", str) => upDomainValue(DomainValue(name, stripString(1, 1)(str)))
+    //case DomainValue("KMLPattern@KML", name)      => Application("KMLApplication", Seq(upSymbol(name)))
     case pattern                                  => pattern
   }
 
@@ -40,18 +51,17 @@ object ParserNormalization {
   // =========================
 
   val toKoreEncodingProdItems: Pattern => Pattern = {
-    case Application("KTerminal@K-PRETTY-PRODUCTION", Application(str, Nil) :: followRegex) => Application(iTerminal, S(str) :: followRegex)
-    case Application("KRegexTerminal@K-PRETTY-PRODUCTION", Seq(Application(precede, Nil), Application(regex, Nil), Application(follow, Nil)))
-                                                                                            => Application(iRegexTerminal, Seq(S(precede), S(regex), S(follow)))
-    case Application("KNonTerminal@K-PRETTY-PRODUCTION", Seq(Application(str, Nil)))        => Application(iNonTerminal, Seq(S(str)))
+    case DomainValue(`KTerminal`, str)        => Application(iTerminal, Seq(S(str)))
+    case DomainValue(`KRegexTerminal`, regex) => Application(iRegexTerminal, Seq(S(regex)))
+    case DomainValue(`KNonTerminal`, str)     => Application(iNonTerminal, Seq(S(str)))
   }
 
   val toKoreEncodingAttributes: Pattern => Pattern = {
-    case Application(`iMainModule`, Seq(Application(modName, Nil)))   => Application(iMainModule, Seq(S(modName)))
-    case Application(`iEntryModules`, Seq(Application(modName, Nil))) => Application(iEntryModules, Seq(S(modName)))
-    case Application("KSyntaxPriority", Seq(ksp))                     => Application(iSyntaxPriority, flattenByLabels("KPriorityItems", ".KPriorityItems")(ksp))
-    case Application("KProduction", args)                             => Application("production", args map toKoreEncodingProdItems)
-    case pattern                                                      => pattern
+    case Application(`iMainModule`, Seq(DomainValue(`KValue`, modName)))   => Application(iMainModule, Seq(S(modName)))
+    case Application(`iEntryModules`, Seq(DomainValue(`KValue`, modName))) => Application(iEntryModules, Seq(S(modName)))
+    case Application(`KSyntaxPriority`, Seq(ksp))                          => Application(iSyntaxPriority, flattenBySymbols(Symbol("KPriorityItems"), Symbol(".KPriorityItems"))(ksp))
+    case Application(`KProduction`, args)                                  => Application(Symbol("production"), args map toKoreEncodingProdItems)
+    case pattern                                                           => pattern
   }
 
   val toKoreEncodingSentences: Sentence => Sentence = {
@@ -65,7 +75,7 @@ object ParserNormalization {
   val toKoreEncodingMod: Module => Module = {
     case Module(name, sentences, atts) =>
       val koreEncodingAttributes = atts map toKoreEncodingAttributes
-      val priorityDummyAxioms = getAttributeKey(iSyntaxPriority, koreEncodingAttributes) map (kp => dummySentence(Seq(Application(iSyntaxPriority, kp map (kpg => Application(iSyntaxPriorityGroup, flattenByLabels("KSymbolList", ".KSymbolList")(kpg)))))))
+      val priorityDummyAxioms = getAttributeKey(iSyntaxPriority, koreEncodingAttributes) map (kp => dummySentence(Seq(Application(iSyntaxPriority, kp map (kpg => Application(iSyntaxPriorityGroup, flattenBySymbols(Symbol("KSymbolList"), Symbol(".KSymbolList"))(kpg)))))))
       Module(name, (sentences ++ priorityDummyAxioms) map toKoreEncodingSentences, koreEncodingAttributes)
   }
 
@@ -79,9 +89,20 @@ object ParserNormalization {
   val preProcess: Pattern => Pattern = traverseTopDown(removeParseInfo) andThen traverseBottomUp(normalizeTokens)
 }
 
-object EKOREDefinition {
-  import ParserNormalization._
-  import KOREDefinition._
+case class EKOREDefinition(b: Builders) {
+
+  val meta = org.kframework.minikore.MiniKoreMeta(b)
+  val dsl = KDefinitionDSL(b)
+  val koreDef = KOREDefinition(b)
+  val parserNorm = ParserNormalization(b)
+
+  import org.kframework.minikore.converters.KoreToMini.{iMainModule, iEntryModules}
+  import org.kframework.minikore.implementation.MiniKore.Module
+  import b._
+  import meta._
+  import dsl._
+  import koreDef._
+  import parserNorm._
 
   // K-PRETTY-PRODUCTION
   // ===================

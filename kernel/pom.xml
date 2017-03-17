@@ -5,8 +5,9 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.kframework.k</groupId>
-    <artifactId>parent</artifactId>
-    <version>4.0.1-SNAPSHOT</version>
+    <artifactId>karser</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
   </parent>
   <artifactId>kernel</artifactId>
   <packaging>jar</packaging>
@@ -232,7 +233,7 @@
           <archive>
             <manifestEntries>
               <Implementation-Revision>${buildNumber}</Implementation-Revision>
-              <Implementation-Branch>${scmBranch}</Implementation-Branch>
+              <!--<Implementation-Branch>${scmBranch}</Implementation-Branch>-->
               <Implementation-Date>${timestamp}</Implementation-Date>
               <Implementation-Version>${project.version}</Implementation-Version>
             </manifestEntries>

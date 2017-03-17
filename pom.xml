@@ -4,21 +4,14 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.kframework.k</groupId>
-  <artifactId>parent</artifactId>
+  <artifactId>karser</artifactId>
   <packaging>pom</packaging>
-  <version>4.0.1-SNAPSHOT</version>
-  <name>K Framework Tool Parent</name>
+  <version>1.0.0-SNAPSHOT</version>
+  <name>Karser</name>
 
   <modules>
     <module>kore</module>
     <module>kernel</module>
-    <module>k-distribution</module>
-    <module>java-backend</module>
-    <module>coq-backend</module>
-    <module>API</module>
-    <module>kdoc</module>
-    <module>shell</module>
-    <module>kale-backend</module>
   </modules>
 
   <scm>
@@ -91,19 +84,6 @@
     </dependency>
   </dependencies>
 
-  <reporting>
-    <plugins>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>findbugs-maven-plugin</artifactId>
-        <version>3.0.0</version>
-        <configuration>
-          <includeFilterFile>src/main/config/findbugs-include.xml</includeFilterFile>
-        </configuration>
-      </plugin>
-    </plugins>
-  </reporting>
-
   <build>
     <pluginManagement>
       <plugins>
@@ -139,95 +119,6 @@
             </fileset>
           </filesets>
         </configuration>
-      </plugin>
-      <plugin>
-        <artifactId>maven-antrun-plugin</artifactId>
-        <version>1.7</version>
-        <executions>
-          <!-- The following execution is used to get the list of changed files to
-               run the copyright check on. -->
-          <execution>
-            <id>init-changed-files</id>
-            <phase>pre-integration-test</phase>
-            <configuration>
-              <target>
-                <exec executable="git" outputproperty="git.diff.out" failifexecutionfails="false">
-                  <arg value="diff" />
-                  <arg value="${base}" />
-                  <arg value="--name-only" />
-                </exec>
-                <condition property="git.diff.out" value="">
-                  <isset property="git.diff.out" />
-                </condition>
-                <filelist id="git.diff.filelist" dir="." files="${git.diff.out}" />
-                <pathconvert property="git.modified.files" pathsep="," refid="git.diff.filelist" dirsep="/">
-                  <map from="${basedir}/" to="" />
-                </pathconvert>
-              </target>
-              <exportAntProperties>true</exportAntProperties>
-            </configuration>
-            <goals>
-              <goal>run</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>2.13</version>
-        <!-- TODO(dwightguth): remove the following dependency override with Maven Checkstyle Plugin 2.14 -->
-        <dependencies>
-            <dependency>
-                <groupId>com.puppycrawl.tools</groupId>
-                <artifactId>checkstyle</artifactId>
-                <version>5.9</version>
-            </dependency>
-        </dependencies>
-        <executions>
-          <execution>
-            <id>checkstyle-copyright</id>
-            <goals>
-              <goal>check</goal>
-            </goals>
-            <inherited>false</inherited>
-            <configuration>
-              <sourceDirectory>${project.basedir}</sourceDirectory>
-              <includes>${git.modified.files}</includes>
-              <configLocation>src/main/config/checkstyle-copyright.xml</configLocation>
-              <failsOnError>true</failsOnError>
-              <consoleOutput>true</consoleOutput>
-              <excludes>.idea/**,**/com/davekoelle/**,**/src/main/sdf/syntax/Integration.sdf</excludes>
-            </configuration>
-          </execution>
-          <execution>
-            <id>checkstyle-k</id>
-            <goals>
-              <goal>check</goal>
-            </goals>
-            <inherited>false</inherited>
-            <configuration>
-              <sourceDirectory>${project.basedir}</sourceDirectory>
-              <includes>**/*.k</includes>
-              <configLocation>src/main/config/checkstyle-k.xml</configLocation>
-              <failsOnError>true</failsOnError>
-              <consoleOutput>true</consoleOutput>
-            </configuration>
-          </execution>
-          <execution>
-            <id>checkstyle-java</id>
-            <goals>
-              <goal>check</goal>
-            </goals>
-            <configuration>
-              <sourceDirectory>src</sourceDirectory>
-              <includes>**/*.java</includes>
-              <configLocation>src/main/config/checkstyle-java.xml</configLocation>
-              <suppressionsLocation>src/main/config/checkstyle-suppress.xml</suppressionsLocation>
-              <failsOnError>true</failsOnError>
-              <consoleOutput>true</consoleOutput>
-            </configuration>
-          </execution>
-        </executions>
       </plugin>
       <plugin>
         <artifactId>maven-release-plugin</artifactId>

@@ -9,7 +9,7 @@ case class KDefinitionDSL(b: Builders) {
   val meta = org.kframework.minikore.MiniKoreMeta(b)
 
   import b._
-  import org.kframework.minikore.implementation.MiniKore.{Definition, Module, Sentence, Import, SortDeclaration, SymbolDeclaration, Attributes, Rule, Axiom}
+  import org.kframework.minikore.implementation.MiniKore.{Definition, Module, Sentence, Import, SymbolDeclaration, Attributes, Rule}
   import outerUtils._
   import meta._
 
@@ -25,6 +25,7 @@ case class KDefinitionDSL(b: Builders) {
   case class Terminal(name: String) extends ProductionItem
 
   implicit def asTerminal(name: String): Terminal = Terminal(name)
+  implicit def asNonTerminal(sort: Sort): NonTerminal = NonTerminal(sort.str)
 
   val KTerminal      = Symbol("KTerminal@K-PRETTY-PRODUCTION")
   val KRegexTerminal = Symbol("KRegexTerminal@K-PRETTY-PRODUCTION")
@@ -80,14 +81,14 @@ case class KDefinitionDSL(b: Builders) {
   def imports(name: String) = Import(name, Seq.empty)
 
   case class symbol(sort: NonTerminal, klabel: String, args: NonTerminal*) {
-    def att(atts: Pattern*): SymbolDeclaration = SymbolDeclaration(Sort(sort.name), Symbol(klabel), args map {_.name}, atts)
+    def att(atts: Pattern*): SymbolDeclaration = SymbolDeclaration(Sort(sort.name), Symbol(klabel), args map {s => Sort(s.name)}, atts)
   }
 
-  case class syntax(sort: NonTerminal, pis: Seq[ProductionItem] = Seq.empty) {
+  case class syntax(sort: Sort, pis: Seq[ProductionItem] = Seq.empty) {
     def is(pis: ProductionItem*): syntax = syntax(sort, pis)
     def att(atts: Pattern*): SymbolDeclaration = {
       val prodPatterns = pis map productionAsPattern
-      SymbolDeclaration(sort.name, getKLabel(atts) getOrElse(prodPatterns map makeCtorString mkString), pis.collect { case Sort(name) => name }, atts :+ prod(prodPatterns))
+      SymbolDeclaration(sort, Symbol(getKLabel(atts) getOrElse(prodPatterns map makeCtorString mkString)), pis.collect { case NonTerminal(name) => Sort(name) }, atts :+ prod(prodPatterns))
     }
   }
 
@@ -95,7 +96,7 @@ case class KDefinitionDSL(b: Builders) {
     def att(atts: Pattern*): Rule = Rule(Rewrite(l, r), atts)
   }
 
-  def term(label: String, args: Pattern*): Application = Application(label, args)
+  def term(label: String, args: Pattern*): Application = Application(Symbol(label), args)
 
   implicit def asDefinition(d: definition): Definition = d.att()
   implicit def asModule(m: module): Module = m.att()
@@ -107,8 +108,16 @@ case class KDefinitionDSL(b: Builders) {
 }
 
 
-object KOREDefinition {
-  import KDefinitionDSL._
+case class KOREDefinition(b: Builders) {
+
+  val meta = org.kframework.minikore.MiniKoreMeta(b)
+  val dsl = KDefinitionDSL(b)
+
+  import org.kframework.minikore.converters.KoreToMini.{iMainModule, iEntryModules}
+  import org.kframework.minikore.implementation.MiniKore.Module
+  import b._
+  import meta._
+  import dsl._
 
   // KTOKENS
   // =======
@@ -226,5 +235,5 @@ object KOREDefinition {
   // KORE
   // ====
 
-  val KORE = definition(KTOKENS, KML, KSENTENCE, KDEFINITION) att (application(iMainModule, "KDEFINITION"), application(iEntryModules, "KDEFINITION"))
+  val KORE = definition(KTOKENS, KML, KSENTENCE, KDEFINITION) att (Application(iMainModule, Seq(DomainValue(KValue, "KDEFINITION"))), Application(iEntryModules, Seq(DomainValue(KValue, "KDEFINITION"))))
 }
