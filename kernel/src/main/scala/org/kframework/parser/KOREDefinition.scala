@@ -60,9 +60,9 @@ case class KarserDSL(b: Builders) {
 
   implicit def asAttribute(name: String): Application = Application(Symbol(name), Seq.empty)
 
-  def kLabel(symbol: Symbol): Application                = Application(KLabel, Seq(DomainValue(KValue, symbol.str)))
+  def kSymbol(symbol: Symbol): Application               = Application(KLabel, Seq(DomainValue(KValue, symbol.str)))
   def kProduction(pis: Seq[ProductionItem]): Application = Application(KProduction, pis map upProductionItem)
-  def kProduction(pis: ProductionItem*): Application     = kProduction(pis)
+  def production(pis: ProductionItem*): Application      = kProduction(pis)
   //def priority(priorities: Seq[Pattern]): Application = Application(KSyntaxPriority, priorities)
   //def kpriority(priorities: Seq[String]*): Application       = priority(Seq(Application(KPriorityItems, priorities map upSymbolList)))
 
@@ -95,6 +95,10 @@ case class KOREDefinition(b: Builders) {
   import meta._
   import karserDsl._
 
+  // TODO: GRRRRRRRR, these should be coming from meta._, why isn't that working?
+  val KSymbolList   = Symbol("#SymbolList")
+  val KSymbolListMt = Symbol("#.SymbolList")
+
   // KTOKENS
   // =======
 
@@ -110,14 +114,12 @@ case class KOREDefinition(b: Builders) {
     syntax(SSymbol) is Regex(KRegexSymbol)        att("token"),
     syntax(SSymbol) is Regex(KRegexSymbolEscaped) att("token"),
 
-    syntax(SSymbolList) is ""                          att(kLabel(KSymbolListMt)),
+    syntax(SSymbolList) is ""                          att(kSymbol(KSymbolListMt)),
     syntax(SSymbolList) is SSymbol                     att(),
-    syntax(SSymbolList) is (SSymbol, ",", SSymbolList) att(kLabel(KSymbolList)),
+    syntax(SSymbolList) is (SSymbol, ",", SSymbolList) att(kSymbol(KSymbolList)),
 
     syntax(SString) is Regex(KRegexString) att("token")
   )
-
-  val KTOKENS_LABELS = Seq(KSymbol, KSymbolList, KSymbolListMt)
 
   // KPATTERN
   // ========
@@ -129,35 +131,32 @@ case class KOREDefinition(b: Builders) {
   val KPATTERN: Module = module("KPATTERN",
     imports("KTOKENS"),
 
-    syntax(SVariable) is (SSymbol, ":", SSymbol) att kLabel(KVariable),
+    syntax(SVariable) is (SSymbol, ":", SSymbol) att(kSymbol(KVariable)),
 
     syntax(SPattern) is SVariable           att(),
     syntax(SPattern) is Regex(KRegexSymbol) att("token"),
 
-    syntax(SPattern) is "top" att(kLabel(KTop)),
-    syntax(SPattern) is "bot" att(kLabel(KBottom)),
+    syntax(SPattern) is "top" att(kSymbol(KTop)),
+    syntax(SPattern) is "bot" att(kSymbol(KBottom)),
 
-    syntax(SPattern) is (SPattern, "/\\", SPattern) att(kLabel(KAnd)),
-    syntax(SPattern) is (SPattern, "\\/", SPattern) att(kLabel(KOr)),
-    syntax(SPattern) is ("~", SPattern)             att(kLabel(KNot)),
+    syntax(SPattern) is (SPattern, "/\\", SPattern) att(kSymbol(KAnd)),
+    syntax(SPattern) is (SPattern, "\\/", SPattern) att(kSymbol(KOr)),
+    syntax(SPattern) is ("~", SPattern)             att(kSymbol(KNot)),
 
-    syntax(SPattern) is (SPattern, "->", SPattern)      att(kLabel(KImplies)),
-    syntax(SPattern) is ("E", SVariable, ".", SPattern) att(kLabel(KExists)),
-    syntax(SPattern) is ("A", SVariable, ".", SPattern) att(kLabel(KForAll)),
+    syntax(SPattern) is (SPattern, "->", SPattern)      att(kSymbol(KImplies)),
+    syntax(SPattern) is ("E", SVariable, ".", SPattern) att(kSymbol(KExists)),
+    syntax(SPattern) is ("A", SVariable, ".", SPattern) att(kSymbol(KForAll)),
 
-    syntax(SPattern) is ("next", SPattern)         att(kLabel(KNext)),
-    syntax(SPattern) is (SPattern, "=>", SPattern) att(kLabel(KRewrite)),
-    syntax(SPattern) is (SPattern, "==", SPattern) att(kLabel(KEquals)),
+    syntax(SPattern) is ("next", SPattern)         att(kSymbol(KNext)),
+    syntax(SPattern) is (SPattern, "=>", SPattern) att(kSymbol(KRewrite)),
+    syntax(SPattern) is (SPattern, "==", SPattern) att(kSymbol(KEquals)),
 
-    syntax(SPattern) is (SSymbol, "(", SPatternList, ")") att(kLabel(KApplication)),
+    syntax(SPattern) is (SSymbol, "(", SPatternList, ")") att(kSymbol(KApplication)),
 
-    syntax(SPatternList) is ""                            att(kLabel(KPatternListMt)),
+    syntax(SPatternList) is ""                            att(kSymbol(KPatternListMt)),
     syntax(SPatternList) is SPattern                      att(),
-    syntax(SPatternList) is (SPattern, ",", SPatternList) att(kLabel(KPatternList))
+    syntax(SPatternList) is (SPattern, ",", SPatternList) att(kSymbol(KPatternList))
   )
-
-  // TODO: Define this programatically (so that if the module changes so does it)
-  def KPATTERN_LABELS = Seq(KVariable, KDomainValue, KTop, KBottom, KAnd, KOr, KNot, KImplies, KExists, KForAll, KNext, KRewrite, KEquals, KApplication, KPatternList, KPatternListMt)
 
   // KSENTENCE
   // =========
@@ -169,16 +168,16 @@ case class KOREDefinition(b: Builders) {
   val KSENTENCE: Module = module("KSENTENCE",
     imports("KPATTERN"),
 
-    syntax(SAttributes) is ""                       att(kLabel(KAttributesMt)),
-    syntax(SAttributes) is ("[", SPatternList, "]") att(kLabel(KAttributes)),
+    syntax(SAttributes) is ""                       att(kSymbol(KAttributesMt)),
+    syntax(SAttributes) is ("[", SPatternList, "]") att(kSymbol(KAttributes)),
 
-    syntax(SSentence) is ("imports", SSymbol, SAttributes)                                      att(kLabel(KImport)),
-    syntax(SSentence) is ("syntax", SSymbol, ":=", SSymbol, "(", SSymbolList, ")", SAttributes) att(kLabel(KSymbolDeclaration)),
-    syntax(SSentence) is ("rule", SPattern, SAttributes)                                        att(kLabel(KRule)),
+    syntax(SSentence) is ("imports", SSymbol, SAttributes)                                      att(kSymbol(KImport)),
+    syntax(SSentence) is ("syntax", SSymbol, ":=", SSymbol, "(", SSymbolList, ")", SAttributes) att(kSymbol(KSymbolDeclaration)),
+    syntax(SSentence) is ("rule", SPattern, SAttributes)                                        att(kSymbol(KRule)),
 
     syntax(SSentenceList) is SSentence                  att(),
-    syntax(SSentenceList) is ""                         att(kLabel(KSentenceListMt)),
-    syntax(SSentenceList) is (SSentence, SSentenceList) att(kLabel(KSentenceList))
+    syntax(SSentenceList) is ""                         att(kSymbol(KSentenceListMt)),
+    syntax(SSentenceList) is (SSentence, SSentenceList) att(kSymbol(KSentenceList))
   )
 
   // KDEFINITION
@@ -191,12 +190,12 @@ case class KOREDefinition(b: Builders) {
   val KDEFINITION: Module = module("KDEFINITION",
     imports("KSENTENCE"),
 
-    syntax(SModule) is ("module", SSymbol, SSentenceList, "endmodule", SAttributes) att(kLabel(KModule)),
+    syntax(SModule) is ("module", SSymbol, SSentenceList, "endmodule", SAttributes) att(kSymbol(KModule)),
 
-    syntax(SModuleList) is ""                     att(kLabel(KModuleListMt)),
-    syntax(SModuleList) is (SModule, SModuleList) att(kLabel(KModuleList)),
+    syntax(SModuleList) is ""                     att(kSymbol(KModuleListMt)),
+    syntax(SModuleList) is (SModule, SModuleList) att(kSymbol(KModuleList)),
 
-    syntax(SDefinition) is (SAttributes, SModuleList) att(kLabel(KDefinition))
+    syntax(SDefinition) is (SAttributes, SModuleList) att(kSymbol(KDefinition))
   )
 
   // KORE

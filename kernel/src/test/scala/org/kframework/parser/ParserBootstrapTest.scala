@@ -6,19 +6,26 @@ import org.junit.Test
 import org.junit.Assert._
 import org.kframework.kore.ADT.SortLookup
 
-import org.kframework.minikore.MiniKore._
-import org.kframework.minikore.KoreToMini
-import org.kframework.minikore.MiniToKore
-import org.kframework.minikore.MiniKoreMeta._
-import org.kframework.minikore.MiniKoreOuterUtils._
-import org.kframework.minikore.MiniKorePatternUtils._
+import org.kframework.minikore.interfaces.pattern._
+import org.kframework.minikore.interfaces.build.Builders
 
-import org.kframework.parser.KDefinitionDSL._
-import org.kframework.parser.KOREDefinition._
-import org.kframework.parser.EKOREDefinition._
-import org.kframework.parser.ParserNormalization._
+import org.kframework.minikore.converters.KoreToMini
+import org.kframework.minikore.converters.KoreToMini._
+import org.kframework.minikore.converters.MiniToKore
+import org.kframework.minikore.converters.MiniToKore._
+import org.kframework.minikore.implementation.MiniKore.{Definition, Module, Sentence, Import, SortDeclaration, SymbolDeclaration, Attributes, Rule, Axiom}
+
+import org.kframework.minikore.implementation.MiniKoreDSL._
 
 object ExpDefinition {
+
+  val b: Builders = org.kframework.minikore.implementation.DefaultBuilders
+  val karserDsl = KarserDSL(b)
+  val minikoreMeta = org.kframework.minikore.MiniKoreMeta(b)
+
+  import b._
+  import karserDsl._
+  import minikoreMeta._
 
   val expString =
     """
@@ -27,21 +34,21 @@ object ExpDefinition {
       ]
 
       module EXP
-        syntax Exp ::= "0" [klabel(0)]
-        syntax Exp ::= "1" [klabel(1)]
-        syntax Exp ::= "2" [klabel(2)]
-        syntax Exp ::= "3" [klabel(3)]
-        syntax Exp ::= "4" [klabel(4)]
-        syntax Exp ::= "5" [klabel(5)]
-        syntax Exp ::= "6" [klabel(6)]
-        syntax Exp ::= "7" [klabel(7)]
-        syntax Exp ::= "8" [klabel(8)]
-        syntax Exp ::= "9" [klabel(9)]
+        syntax Exp ::= "0" [kSymbol(0)]
+        syntax Exp ::= "1" [kSymbol(1)]
+        syntax Exp ::= "2" [kSymbol(2)]
+        syntax Exp ::= "3" [kSymbol(3)]
+        syntax Exp ::= "4" [kSymbol(4)]
+        syntax Exp ::= "5" [kSymbol(5)]
+        syntax Exp ::= "6" [kSymbol(6)]
+        syntax Exp ::= "7" [kSymbol(7)]
+        syntax Exp ::= "8" [kSymbol(8)]
+        syntax Exp ::= "9" [kSymbol(9)]
 
-        syntax Exp ::= Exp "+" Exp [klabel(p), plus]
-        syntax Exp ::= Exp "-" Exp [minus, klabel(m)]
-        syntax Exp ::= Exp "*" Exp [klabel(t), times]
-        syntax Exp ::= Exp "/" Exp [klabel(d), div]
+        syntax Exp ::= Exp "+" Exp [kSymbol(p), plus]
+        syntax Exp ::= Exp "-" Exp [minus, kSymbol(m)]
+        syntax Exp ::= Exp "*" Exp [kSymbol(t), times]
+        syntax Exp ::= Exp "/" Exp [kSymbol(d), div]
 
         rule p(3, 3) => 6
         rule m(9, 4) => 5
@@ -54,21 +61,21 @@ object ExpDefinition {
 
   val Exp = Sort("Exp")
   val EXP: Module = module("EXP",
-    syntax(Exp) is "0" att klabel("0"),
-    syntax(Exp) is "1" att klabel("1"),
-    syntax(Exp) is "2" att klabel("2"),
-    syntax(Exp) is "3" att klabel("3"),
-    syntax(Exp) is "4" att klabel("4"),
-    syntax(Exp) is "5" att klabel("5"),
-    syntax(Exp) is "6" att klabel("6"),
-    syntax(Exp) is "7" att klabel("7"),
-    syntax(Exp) is "8" att klabel("8"),
-    syntax(Exp) is "9" att klabel("9"),
+    syntax(Exp) is "0" att(kSymbol("0")),
+    syntax(Exp) is "1" att(kSymbol("1")),
+    syntax(Exp) is "2" att(kSymbol("2")),
+    syntax(Exp) is "3" att(kSymbol("3")),
+    syntax(Exp) is "4" att(kSymbol("4")),
+    syntax(Exp) is "5" att(kSymbol("5")),
+    syntax(Exp) is "6" att(kSymbol("6")),
+    syntax(Exp) is "7" att(kSymbol("7")),
+    syntax(Exp) is "8" att(kSymbol("8")),
+    syntax(Exp) is "9" att(kSymbol("9")),
 
-    syntax(Exp) is (Exp, "+", Exp) att(klabel("p"), "plus"),
-    syntax(Exp) is (Exp, "-", Exp) att("minus", klabel("m")),
-    syntax(Exp) is (Exp, "*", Exp) att(klabel("t"), "times"),
-    syntax(Exp) is (Exp, "/", Exp) att(klabel("d"), "div"),
+    syntax(Exp) is (Exp, "+", Exp) att(kSymbol("p"), "plus"),
+    syntax(Exp) is (Exp, "-", Exp) att("minus", kSymbol("m")),
+    syntax(Exp) is (Exp, "*", Exp) att(kSymbol("t"), "times"),
+    syntax(Exp) is (Exp, "/", Exp) att(kSymbol("d"), "div"),
 
     // priority( >("p", "t") , >("m", "d") ),
     rule(term("p", term("3"), term("3")), term("6")),
@@ -79,10 +86,24 @@ object ExpDefinition {
     rule(term("d", term("6"), term("3")), term("2"))
   )
 
-  val EXP_DEF = definition(EXP) att(application(KoreToMini.iMainModule, "EXP"), application(KoreToMini.iEntryModules, "EXP"))
+  val EXP_DEF = definition(EXP) att(Application(iMainModule, Seq(DomainValue(KValue, "EXP"))), Application(iEntryModules, Seq(DomainValue(KValue, "EXP"))))
 }
 
 class ParserBootstrapTest {
+
+  val b: Builders = org.kframework.minikore.implementation.DefaultBuilders
+  val karserDsl: KarserDSL = KarserDSL(b)
+  val minikoreMeta = org.kframework.minikore.MiniKoreMeta(b)
+  val kore = org.kframework.parser.KOREDefinition(b)
+  val ekore = org.kframework.parser.EKOREDefinition(b)
+  val patternUtils = org.kframework.minikore.MiniKorePatternUtils(b)
+
+  import b._
+  import karserDsl._
+  import minikoreMeta._
+  import kore._
+  import ekore._
+  import patternUtils._
 
   val miniDef = MiniToKore(toKoreEncodingDef(EKORE))
   val mainMod = miniDef.mainModule
@@ -94,7 +115,7 @@ class ParserBootstrapTest {
       case Left(y) => throw new Error("runParser error: " + y.toString)
     }
   def parseK(toParse: String, parseAs: String): Pattern = runParser(kParser, toParse, parseAs)
-  def parsePrettySentences(input: String): Seq[Pattern] = flattenByLabels("KSentenceList", ".KSentenceList")(preProcess(parseK(input, "KSentenceList"))) flatMap desugarPrettySentence
+  def parsePrettySentences(input: String): Seq[Pattern] = flattenBySymbols(KSentenceList, KSentenceListMt)(preProcess(parseK(input, "KSentenceList"))) flatMap desugarPrettySentence
 
   // TODO: won't pass because priorities are generated
   def kdefFixpoint(): Unit = {
@@ -107,15 +128,15 @@ class ParserBootstrapTest {
     val Exp  = Sort("Exp")
     val Stmt = Sort("Stmt")
     val sentenceTests: Seq[(Sentence, String)]
-        = Seq( (symbol(Exp, "mystmt", Stmt)               , """syntax Exp := mystmt(Stmt)"""                                                                      )
-             , (symbol(Exp, "_", Stmt) att kprod(Stmt)    , """syntax Exp ::= Stmt"""                                                                             )
-             , (syntax(Exp) is Stmt att klabel("mystmt")  , """syntax Exp := mystmt(Stmt) [klabel(mystmt), KProduction(KNonTerminal@K-PRETTY-PRODUCTION(Stmt))]""")
-             , (syntax(Exp) is Stmt                       , """syntax Exp ::= Stmt"""                                                                             )
-             , (syntax(Exp) is Stmt att klabel("mystmt")  , """syntax Exp ::= Stmt [klabel(mystmt)]"""                                                            )
-             , (syntax(Exp) is ("true", Stmt)             , """syntax Exp ::= "true" Stmt"""                                                                      )
-             , (syntax(Exp) is Regex("[^ \n\r\t]+")       , """syntax Exp ::= r"[^ \n\r\t]+""""                                                                   )
-             , (syntax(Exp) is Regex(" a\n\r\tb")         , """syntax Exp ::= r" a\n\r\tb""""                                                                     )
-             , (syntax(Exp) is Regex("`[^ a\n\r\tb]+`")   , """syntax Exp ::= r"`[^ a\n\r\tb]+`""""                                                               )
+        = Seq( (symbol(Exp, "mystmt", Stmt)                 , """syntax Exp := mystmt(Stmt)"""                                                                       )
+             , (symbol(Exp, "_", Stmt) att production(Stmt) , """syntax Exp ::= Stmt"""                                                                              )
+             , (syntax(Exp) is Stmt att kSymbol("mystmt")   , """syntax Exp := mystmt(Stmt) [kSymbol(mystmt), KProduction(KNonTerminal@K-PRETTY-PRODUCTION(Stmt))]""")
+             , (syntax(Exp) is Stmt                         , """syntax Exp ::= Stmt"""                                                                              )
+             , (syntax(Exp) is Stmt att kSymbol("mystmt")   , """syntax Exp ::= Stmt [kSymbol(mystmt)]"""                                                            )
+             , (syntax(Exp) is ("true", Stmt)               , """syntax Exp ::= "true" Stmt"""                                                                       )
+             , (syntax(Exp) is Regex("[^ \n\r\t]+")         , """syntax Exp ::= r"[^ \n\r\t]+""""                                                                    )
+             , (syntax(Exp) is Regex(" a\n\r\tb")           , """syntax Exp ::= r" a\n\r\tb""""                                                                      )
+             , (syntax(Exp) is Regex("`[^ a\n\r\tb]+`")     , """syntax Exp ::= r"`[^ a\n\r\tb]+`""""                                                                )
              )
 
 
@@ -125,22 +146,22 @@ class ParserBootstrapTest {
   @Test def multipleProductions(): Unit = {
     val prettyTests: Seq[(String, String)]
         = Seq( ("""syntax Exp ::= "true"                         syntax Exp ::= Exp"""                            , """syntax Exp ::= "true"                         | Exp"""                           )
-             , ("""syntax Exp ::= Exp "+" Exp                    syntax Exp ::= Exp "/" Exp [klabel(division)]""" , """syntax Exp ::= Exp "+" Exp                    | Exp "/" Exp [klabel(division)]""")
-             , ("""syntax Exp ::= "true" Exp [klabel(withTrue)]  syntax Exp ::= "not" Exp Exp "plus" Exp"""       , """syntax Exp ::= "true" Exp [klabel(withTrue)]  | "not" Exp Exp "plus" Exp"""      )
-             , ("""syntax Exp ::= Exp "+" Exp [klabel(addition)] syntax Exp ::= Exp "/" Exp [klabel(division)]""" , """syntax Exp ::= Exp "+" Exp [klabel(addition)] | Exp "/" Exp [klabel(division)]""")
+             , ("""syntax Exp ::= Exp "+" Exp                    syntax Exp ::= Exp "/" Exp [kSymbol(division)]""" , """syntax Exp ::= Exp "+" Exp                    | Exp "/" Exp [kSymbol(division)]""")
+             , ("""syntax Exp ::= "true" Exp [kSymbol(withTrue)]  syntax Exp ::= "not" Exp Exp "plus" Exp"""       , """syntax Exp ::= "true" Exp [kSymbol(withTrue)]  | "not" Exp Exp "plus" Exp"""      )
+             , ("""syntax Exp ::= Exp "+" Exp [kSymbol(addition)] syntax Exp ::= Exp "/" Exp [kSymbol(division)]""" , """syntax Exp ::= Exp "+" Exp [kSymbol(addition)] | Exp "/" Exp [kSymbol(division)]""")
              )
 
-    def stripPriorities(input: Seq[Pattern]): Seq[Pattern] = input collect { case a@Application("KSymbolDeclaration", _) => a }
+    def stripPriorities(input: Seq[Pattern]): Seq[Pattern] = input collect { case a@Application(KSymbolDeclaration, _) => a }
 
     prettyTests foreach { strings => assertEquals(parsePrettySentences(strings._1) map downSentence, stripPriorities(parsePrettySentences(strings._2)) map downSentence) }
   }
 
   @Test def prioritiesTest(): Unit = {
     val prioritiesTests: Seq[(String, String)]
-        = Seq( ("""syntax Exp ::= "true" syntax Exp ::= Exp "+" Exp [klabel(p)] syntax Exp ::= Exp "/" Exp [klabel(d)] syntax priority true , p , d""" , """syntax Exp ::= "true" | Exp "+" Exp [klabel(p)] | Exp "/" Exp [klabel(d)]""")
-             , ("""syntax Exp ::= "true" syntax Exp ::= Exp "+" Exp [klabel(p)] syntax Exp ::= Exp "/" Exp [klabel(d)] syntax priority true > p , d""" , """syntax Exp ::= "true" > Exp "+" Exp [klabel(p)] | Exp "/" Exp [klabel(d)]""")
-             , ("""syntax Exp ::= "true" syntax Exp ::= Exp "+" Exp [klabel(p)] syntax Exp ::= Exp "/" Exp [klabel(d)] syntax priority true , p > d""" , """syntax Exp ::= "true" | Exp "+" Exp [klabel(p)] > Exp "/" Exp [klabel(d)]""")
-             , ("""syntax Exp ::= "true" syntax Exp ::= Exp "+" Exp [klabel(p)] syntax Exp ::= Exp "/" Exp [klabel(d)] syntax priority true > p > d""" , """syntax Exp ::= "true" > Exp "+" Exp [klabel(p)] > Exp "/" Exp [klabel(d)]""")
+        = Seq( ("""syntax Exp ::= "true" syntax Exp ::= Exp "+" Exp [kSymbol(p)] syntax Exp ::= Exp "/" Exp [kSymbol(d)] syntax priority true , p , d""" , """syntax Exp ::= "true" | Exp "+" Exp [kSymbol(p)] | Exp "/" Exp [kSymbol(d)]""")
+             , ("""syntax Exp ::= "true" syntax Exp ::= Exp "+" Exp [kSymbol(p)] syntax Exp ::= Exp "/" Exp [kSymbol(d)] syntax priority true > p , d""" , """syntax Exp ::= "true" > Exp "+" Exp [kSymbol(p)] | Exp "/" Exp [kSymbol(d)]""")
+             , ("""syntax Exp ::= "true" syntax Exp ::= Exp "+" Exp [kSymbol(p)] syntax Exp ::= Exp "/" Exp [kSymbol(d)] syntax priority true , p > d""" , """syntax Exp ::= "true" | Exp "+" Exp [kSymbol(p)] > Exp "/" Exp [kSymbol(d)]""")
+             , ("""syntax Exp ::= "true" syntax Exp ::= Exp "+" Exp [kSymbol(p)] syntax Exp ::= Exp "/" Exp [kSymbol(d)] syntax priority true > p > d""" , """syntax Exp ::= "true" > Exp "+" Exp [kSymbol(p)] > Exp "/" Exp [kSymbol(d)]""")
              )
 
     prioritiesTests foreach { strings => assertEquals(parsePrettySentences(strings._1), parsePrettySentences(strings._2)) }

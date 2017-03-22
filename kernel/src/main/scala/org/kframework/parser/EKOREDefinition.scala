@@ -131,23 +131,23 @@ case class EKOREDefinition(b: Builders) {
     syntax(SProduction) is STerminal                  att(),
     syntax(SProduction) is SRegexTerminal             att(),
     syntax(SProduction) is SNonTerminal               att(),
-    syntax(SProduction) is (SProduction, SProduction) att(kLabel(KProduction), "assoc"),
+    syntax(SProduction) is (SProduction, SProduction) att(kSymbol(KProduction), "assoc"),
 
-    syntax(SProductionWithAttributes) is (SProduction, SAttributes) att(kLabel(KProductionWithAttributes)),
+    syntax(SProductionWithAttributes) is (SProduction, SAttributes) att(kSymbol(KProductionWithAttributes)),
 
     syntax(SProductionsBlock) is SProductionWithAttributes                           att(),
-    syntax(SProductionsBlock) is (SProductionWithAttributes, "|", SProductionsBlock) att(kLabel(KProductionsBlock)),
+    syntax(SProductionsBlock) is (SProductionWithAttributes, "|", SProductionsBlock) att(kSymbol(KProductionsBlock)),
 
     syntax(SProductions) is SProductionsBlock                      att(),
-    syntax(SProductions) is (SProductionsBlock, ">", SProductions) att(kLabel(KProductionsPriority), "assoc"),
+    syntax(SProductions) is (SProductionsBlock, ">", SProductions) att(kSymbol(KProductionsPriority), "assoc"),
 
-    syntax(SPriority) is ""                          att(kLabel(KPriorityItemsMt)),
+    syntax(SPriority) is ""                          att(kSymbol(KPriorityItemsMt)),
     syntax(SPriority) is SSymbolList                 att(),
-    syntax(SPriority) is (SPriority, ">", SPriority) att(kLabel(KPriorityItems), "assoc"),
+    syntax(SPriority) is (SPriority, ">", SPriority) att(kSymbol(KPriorityItems), "assoc"),
 
-    syntax(SSentence) is ("syntax", SSymbol, SAttributes)         att(kLabel(KSortDeclaration)),
-    syntax(SSentence) is ("syntax", SSymbol, "::=", SProductions) att(kLabel(KSyntaxDeclaration)),
-    syntax(SSentence) is ("syntax", "priority", SPriority)        att(kLabel(KPriorityDeclaration))
+    syntax(SSentence) is ("syntax", SSymbol, SAttributes)         att(kSymbol(KSortDeclaration)),
+    syntax(SSentence) is ("syntax", SSymbol, "::=", SProductions) att(kSymbol(KSyntaxDeclaration)),
+    syntax(SSentence) is ("syntax", "priority", SPriority)        att(kSymbol(KPriorityDeclaration))
   )
 
   // TODO: correctly process precede/follow regex clauses
@@ -207,7 +207,7 @@ case class EKOREDefinition(b: Builders) {
 
     syntax(SBubbleItem) is Regex(KBubbleRegex) att("avoid", "token", term("reject2", term("rule|syntax|endmodule|configuration|context"))),
 
-    syntax(SBubble) is (SBubble, SBubbleItem) att(kLabel(KBubble), "avoid"),
+    syntax(SBubble) is (SBubble, SBubbleItem) att(kSymbol(KBubble), "avoid"),
     syntax(SBubble) is SBubbleItem            att("avoid"),
 
     syntax(SPattern) is SBubble att()
@@ -216,8 +216,7 @@ case class EKOREDefinition(b: Builders) {
   def mkRuleParserDefinition(astDef: Pattern): Definition = {
     val defn = downDefinition(traverseTopDown(removeSubNodes(KRule))(astDef))
     val mainModuleName = getAttributeKey(iMainModule, defn.att) match { case Seq(Seq(Application(Symbol(name), Nil))) => name }
-    val sorts = allSorts(defn) toSeq
-    val newSentences = sorts flatMap (sort => Seq(syntax(sort) is SVariable, syntax(SPattern) is sort)) map (_.att())
+    val newSentences = defn.sorts.toSeq flatMap (sort => Seq(syntax(sort) is SVariable, syntax(SPattern) is sort)) map (_.att())
     val ruleParserModuleName = mainModuleName + "-RULE-PARSER"
     val ruleParserModule = Module(ruleParserModuleName, imports(mainModuleName).att() +: imports("KPATTERN").att() +: newSentences, Seq.empty)
     val ruleParserAtts = updateAttribute(iMainModule, Application(ruleParserModuleName, Nil)) andThen updateAttribute(iEntryModules, Application(ruleParserModuleName, Nil))
@@ -245,7 +244,7 @@ case class EKOREDefinition(b: Builders) {
 
   val upUserPattern: Pattern => Pattern = {
     case sym@Application(`KDomainValue`, _)                                             => sym
-    case Application(label, args) if (KTOKENS_LABELS ++ KPATTERN_LABELS) contains label => Application(label, args map upUserPattern)
+    case Application(label, args) if (KTOKENS.symbols ++ KPATTERN.symbols) contains label => Application(label, args map upUserPattern)
     case Application(label, args)                                                       => Application(`KApplication`, Seq(upSymbol(label), consListLeft(`KPatternList`, `KPatternListMt`)(args map upUserPattern)))
   }
 
